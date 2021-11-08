@@ -1,0 +1,520 @@
+unit UYemKart;
+
+interface
+
+uses
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.OleCtrls, zkemkeeper_TLB,
+  Vcl.StdCtrls, Vcl.ExtCtrls, Data.DB, MemDS, DBAccess, Ora, OraCall,dateutils,
+  Vcl.ComCtrls, RzBckgnd;
+
+type
+  TForm1 = class(TForm)
+    edtNetAddress: TLabeledEdit;
+    edtNetPort: TLabeledEdit;
+    btnBaglan: TButton;
+    Memo1: TMemo;
+    Panel1: TPanel;
+    Panel2: TPanel;
+    Button1: TButton;
+    CZKEM1: TCZKEM;
+    btnkapiAc: TButton;
+    OraSession1: TOraSession;
+    qkayit: TOraQuery;
+    Button2: TButton;
+    QYmkEkle: TOraSQL;
+    Qcihaz: TOraQuery;
+    edtCihazAdi: TLabeledEdit;
+    edtCihazTuru: TLabeledEdit;
+    edtCihazTetSure: TLabeledEdit;
+    Timer1: TTimer;
+    QOGUN: TOraQuery;
+    qpersonel: TOraQuery;
+    Button3: TButton;
+    btnAllKullanici: TButton;
+    qtumpersonel: TOraQuery;
+    btnKulGuncelle: TButton;
+    Button4: TButton;
+    btnonline: TButton;
+    Panel3: TPanel;
+    Panel4: TPanel;
+    RzBackground1: TRzBackground;
+    RzBackground2: TRzBackground;
+    RzBackground3: TRzBackground;
+    QPER_KAYIT: TOraQuery;
+    QPER_KAYITGIRIS_ID: TFloatField;
+    QPER_KAYITPER_NO: TFloatField;
+    QPER_KAYITAD_SOYAD: TStringField;
+    QPER_KAYITCIHAZ_IP: TStringField;
+    QPER_KAYITKART_NO: TFloatField;
+    QYmkEkleKrmd: TOraSQL;
+    procedure btnBaglanClick(Sender: TObject);
+    procedure bilgi_yaz(const s:string);
+    procedure Button1Click(Sender: TObject);
+    procedure cihaz_Bilgisi_oku;
+    procedure CZKEM1HIDNum(ASender: TObject; CardNumber: Integer);
+    procedure btnkapiAcClick(Sender: TObject);
+    procedure Button2Click(Sender: TObject);
+    procedure FormActivate(Sender: TObject);
+    procedure QcihazAfterOpen(DataSet: TDataSet);
+    procedure btnAllKullaniciClick(Sender: TObject);
+    procedure Button3Click(Sender: TObject);
+    procedure btnKulGuncelleClick(Sender: TObject);
+    procedure Button4Click(Sender: TObject);
+    procedure btnonlineClick(Sender: TObject);
+  private
+  DevID: integer;
+   // device_id  ==1
+   // Aslýnda, tcp / ip iletiþimini kullandýðýnýzda, bu parametre göz ardý edilecektir,
+   // yani herhangi bir tam sayý uygun olacaktýr. Burada 1 kullanýyoruz.
+    Commport: integer;
+  public
+    { Public declarations }
+  end;
+
+var
+  Form1: TForm1;
+
+
+implementation
+
+{$R *.dfm}
+const
+  StatusNames: array[1..12] of string=(
+    'Toplam Yönetici',
+    'Toplam Kullanýcý',
+    'toplam Parmakizi',
+    'Total Þifre ',
+    'Total Yönetici',
+    'Total Giriþ Çýkýþ kaydý',
+    'Kiþiye ait parmakizi numarasý',
+    'Kiþiye ait kullanici numarasý',
+    'Kiþiye ait giriþ çýkýþ kayýt numarasý',
+    'Kalan parmakizi numarasý',
+    'kalan kullanýcý numarasý',
+    'kalan giriþ çýkýþ kayýt numarasý');
+
+
+
+procedure TForm1.bilgi_yaz(const s: string);
+begin
+   memo1.Lines.Add(s);
+  memo1.Refresh;
+end;
+
+procedure TForm1.btnAllKullaniciClick(Sender: TObject);
+var
+dwEnrollNumber, Name, Password,kart_no:WideString;
+Privilege: integer;
+ Enabled:WordBool;
+begin
+CZKEM1.EnableDevice(devid,false);
+CZKEM1.ReadAllUserID(devid);
+while CZKEM1.SSR_GetAllUserInfo(devid,dwEnrollNumber,name,Password,Privilege,Enabled) do
+begin
+  CZKEM1.GetStrCardNumber(kart_no);
+  bilgi_yaz(format('Kull_No: %s Adý : %s sifre : %s prive : %d ',[dwEnrollNumber,name,password,privilege]));
+
+  QPER_KAYIT.Open;
+  QPER_KAYIT.Append;
+  QPER_KAYITGIRIS_ID.AsInteger:=0;
+  QPER_KAYITPER_NO.AsInteger:=StrToInt(dwEnrollNumber);
+  QPER_KAYITAD_SOYAD.AsString:=name;
+  QPER_KAYITCIHAZ_IP.AsString:='10.42.116.251' ;
+  QPER_KAYITKART_NO.AsInteger:=StrToInt(kart_no);
+  QPER_KAYIT.Post;
+
+end;
+bilgi_yaz('Ýþlem Sona Erdi ');
+Application.ProcessMessages;
+CZKEM1.EnableDevice(devid,True);
+ OraSession1.Commit;
+end;
+
+procedure TForm1.btnBaglanClick(Sender: TObject);
+var
+hata :integer;
+durum:Boolean;
+begin
+Qcihaz.Open;
+
+
+    if btnBaglan.Tag=1  then
+    begin
+        CZKEM1.RefreshData(devid);
+        CZKEM1.EnableDevice(devid,True);
+        btnBaglan.Tag:=0;
+        btnBaglan.Caption:='Baðlan';
+    end else
+    begin
+
+    devid:=strtoint(edtNetPort.Text);
+    durum:=CZKEM1.Connect_Net(edtNetAddress.Text,devid);
+    //durum:=CZKEM1.Connect_Net(edtNetAddress.Text,devid);
+    devid:=1;
+
+
+    if durum then
+    begin
+    bilgi_yaz('Cihaza Baðlanýldý');
+    cihaz_Bilgisi_oku;
+    btnBaglan.Tag:=1;
+    btnBaglan.Caption:='Baðlantý Kes';
+
+    if not czkem1.RegEvent(devid,65535) then
+      begin
+        showmessage('regEvent de hata oldu');
+      end;
+    end
+    else
+    begin
+      czkem1.GetLastError(hata);
+      bilgi_yaz(format('Cihaza Baðlanýrken Hata oluþtu hataNo. =',[hata]));
+    end;
+    czkem1.SetDeviceTime(devid);
+    bilgi_yaz(' ');
+    end;
+end;
+
+procedure TForm1.btnkapiAcClick(Sender: TObject);
+begin
+ CZKem1.ACUnlock(DevId,5)   ;
+end;
+
+procedure TForm1.btnKulGuncelleClick(Sender: TObject);
+
+VAR
+KART_NO,SIRA_NO,AD,SIFRE:STRING;
+YETKI,i:INTEGER;
+AKTIF,DURUM:WordBool;
+
+
+begin
+qtumpersonel.Open;
+qtumpersonel.First;
+
+
+
+
+  i:=0;
+while not qtumpersonel.Eof do
+begin
+
+KART_NO:=qtumpersonel.FieldByName('KART_NO').AsString;
+SIRA_NO:=qtumpersonel.FieldByName('SIRA_NO').AsString;
+AD:=qtumpersonel.FieldByName('AD').AsString;
+yetki:= qtumpersonel.FieldByName('yetkili').AsInteger ;
+AKTIF:=TRUE;
+
+    CZKEM1.SetStrCardNumber(KART_NO);
+    DURUM:=(CZKEM1.SSR_SetUserInfo(devid,
+                        qtumpersonel.FieldByName('SIRA_NO').AsString,
+                        qtumpersonel.FieldByName('AD').AsString,
+                        qtumpersonel.FieldByName('Sifre').AsString, YETKI, AKTIF));
+
+  if  DURUM then
+    begin
+
+      bilgi_YAZ(FORMAT('Kayýt Yapýldý kartno: %s adý : %s',[KART_NO,AD]));
+
+    end  else
+    begin
+      bilgi_yaz('Kayýt Yapýlýrken hata oluþtu');
+    end;
+    Application.ProcessMessages;
+    qtumpersonel.Next;
+
+end;
+      bilgi_yaz('Ýþlem Bitti');
+      CZKEM1.RefreshData(devid);
+      CZKEM1.EnableDevice(devid, true); // cihazý devreye al
+qtumpersonel.Close;
+end;
+
+procedure TForm1.btnonlineClick(Sender: TObject);
+begin
+    if not czkem1.RegEvent(devid,65535) then
+      begin
+        showmessage('regEvent de hata oldu');
+      end;
+end;
+
+procedure TForm1.Button1Click(Sender: TObject);
+begin
+Memo1.Lines.Clear;
+end;
+
+
+
+procedure TForm1.Button2Click(Sender: TObject);
+begin
+czkem1.SetDeviceTime(devid);
+end;
+
+
+
+procedure TForm1.Button3Click(Sender: TObject);
+var
+dwEnrollNumber, Name, Password:WideString;
+Privilege,kulrec,deger,hata: integer;
+ Enabled:WordBool;
+
+begin
+  if CZKEM1.GetDeviceStatus(devid, 2, deger) then
+    bilgi_yaz(format('%s: %d', [StatusNames[2],deger]))
+  else
+  begin
+     CZKEM1.GetLastError(hata);
+    bilgi_yaz(format('! GetDeviceStatus(%d) ErrorNo.=%d',[2, hata]));
+    exit;
+  end;
+
+
+CZKEM1.EnableDevice(devid,False)  ;
+CZKEM1.ReadAllUserID(devid);
+while CZKEM1.SSR_GetAllUserInfo(devid,dwEnrollNumber,name,Password,Privilege,Enabled) do
+begin
+ CZKEM1.ssr_DeleteEnrollData(DevId, dwenrollnumber,  12);
+ bilgi_yaz(format(' Kullanýcý no : %S silindi',[dwEnrollNumber]));
+
+end;
+ CZKEM1.EnableDevice(devid,True) ;
+
+end;
+
+procedure TForm1.Button4Click(Sender: TObject);
+begin
+CZKEM1.RegEvent(devid,0);
+end;
+
+procedure TForm1.cihaz_Bilgisi_oku;
+var
+  s: widestring;
+  hata, Value, i,
+  dwYear, dwMonth, dwDay, dwHour, dwMinute, dwSecond: integer;
+begin
+  if CZKEM1.GetFirmwareVersion(devid,s) then
+   bilgi_yaz('! Cihaz Versiyon no : '+s )
+   else
+   begin
+     CZKEM1.GetLastError(hata);
+     bilgi_yaz(format('Cihaz Versiyon no hata. =%D',[hata]));
+   end;
+
+  if CZKEM1.GetSerialNumber(devid,s) then
+    bilgi_yaz('Cihaz Seri No : '+s)
+    else
+    begin
+      CZKEM1.GetLastError(hata);
+      bilgi_yaz(format('Cihaz Seri No hata . =%d',[hata]));
+    end;
+
+  if CZKEM1.GetDeviceTime(devid, dwYear, dwMonth, dwDay, dwHour, dwMinute, dwSecond) then
+    bilgi_yaz(Format('Cihaz Saati=%d-%d-%d %d:%d:%d',[dwYear, dwMonth, dwDay, dwHour, dwMinute, dwSecond]))
+  else
+  begin
+    CZKEM1.GetLastError(hata);
+    bilgi_yaz(format('! GetDeviceTime ErrorNo.=%d',[hata]));
+  end;
+
+
+
+end;
+
+procedure TForm1.CZKEM1HIDNum(ASender: TObject; CardNumber: Integer);
+var
+ saat, dakika, saniye, salise : Word;
+ Strsaat,strdakika,strsaniye,strsalise:string;
+
+begin
+
+ decodeTime(now,saat,dakika,saniye,salise);
+
+  if saat<10 then  strsaat:='0'+inttostr(saat) else strsaat:=inttostr(saat);
+  if dakika<10 then  strdakika:='0'+inttostr(dakika) else strdakika:=inttostr(dakika);
+  if saniye<10 then  strsaniye:='0'+inttostr(saniye) else strsaniye:=inttostr(saniye);
+
+
+ QOGUN.ClOSE;
+ QOGUN.Params[0].AsString:=strsaat+strdakika;
+ QOGUN.Open;
+
+ if QOGUN.RecordCount=0 then
+ begin
+ bilgi_yaz('Uygun Vardiya saati bulunamamýþtýr !');
+ czkem1.PlayVoiceByIndex(2);
+ exit;
+ end;
+
+ qpersonel.Close;
+ qpersonel.Params[0].AsString:=inttostr(cardnumber);
+ qpersonel.Open;
+
+ if qpersonel.RecordCount>0 then
+ begin
+
+   qkayit.Close;
+   qkayit.Params[0].AsString:=inttostr(cardnumber);
+   qkayit.Open;
+   if qkayit.RecordCount>0 then
+   begin
+
+      if qkayit.FieldByName('yemek').AsString='1' then
+      begin
+
+        bilgi_yaz(format('Giriþ Yapýldý KartNo. :%d Zaman: %s',[cardnumber,DateTimeToStr(now)]));
+        czkem1.PlayVoiceByIndex(0);
+        if czkem1.ACUnlock(devid,strtoint(Qcihaz.FieldByName('ROLE_TETIK_SURE').AsString)) then bilgi_yaz('kapý Açýldý') else  bilgi_yaz('Kapý Açýlamadý Hata Oluþtu');
+
+        QYmkEkle.ParamByName('giris_id').AsInteger:=0;
+        QYmkEkle.ParamByName('tc').AsString:=qkayit.FieldByName('tc_kimlik_no').AsString;
+        QYmkEkle.ParamByName('ad_soyad').AsString:=qkayit.FieldByName('ad_soyad').AsString;
+        QYmkEkle.ParamByName('tarih').AsDateTime:=now;
+        QYmkEkle.ParamByName('yedi').AsInteger:=qkayit.FieldByName('yemek').AsInteger;
+        QYmkEkle.ParamByName('ogun').AsString:=qkayit.FieldByName('ogun').AsString;
+        QYmkEkle.ParamByName('cihaz_ip').AsString:=Qcihaz.FieldByName('IP_ADRES').AsString;
+        QYmkEkle.ParamByName('Kart_no').AsInteger:=cardnumber;
+
+        QYmkEkle.Execute;
+        OraSession1.Commit;
+        qkayit.Close;
+
+      end  else
+      begin
+
+              czkem1.PlayVoiceByIndex(2);
+              bilgi_yaz(format('Giriþ Engellendi KartNo.:%d Zaman: %s',[cardnumber,DateTimeToStr(now)]));
+
+              QYmkEkle.ParamByName('giris_id').AsInteger:=0;
+              QYmkEkle.ParamByName('tc').AsString:=qkayit.FieldByName('tc_kimlik_no').AsString;
+              QYmkEkle.ParamByName('ad_soyad').AsString:=qkayit.FieldByName('ad_soyad').AsString;
+              QYmkEkle.ParamByName('tarih').AsDateTime:=now;
+              QYmkEkle.ParamByName('yedi').AsInteger:=0;
+              QYmkEkle.ParamByName('ogun').AsString:=qkayit.FieldByName('ogun').AsString;
+              QYmkEkle.ParamByName('cihaz_ip').AsString:=Qcihaz.FieldByName('IP_ADRES').AsString;
+              QYmkEkle.ParamByName('Kart_no').AsInteger:=cardnumber;
+
+              QYmkEkle.Execute;
+              OraSession1.Commit;
+              qkayit.Close;
+      end;
+
+   end else
+   begin
+
+              czkem1.PlayVoiceByIndex(2);
+              bilgi_yaz(format('Giriþ Engellendi KartNo.:%d Zaman: %s',[cardnumber,DateTimeToStr(now)]));
+
+              QYmkEkle.ParamByName('giris_id').AsInteger:=0;
+              QYmkEkle.ParamByName('tc').AsString:=qpersonel.FieldByName('tc_kimlik_no').AsString;
+              QYmkEkle.ParamByName('ad_soyad').AsString:=qpersonel.FieldByName('ad_soyad').AsString;
+              QYmkEkle.ParamByName('tarih').AsDateTime:=now;
+              QYmkEkle.ParamByName('yedi').AsInteger:=0;
+              if QOGUN.RecordCount>0 then
+              QYmkEkle.ParamByName('ogun').AsString:=QOGUN.FieldByName('SIMGE').AsString
+              else
+              QYmkEkle.ParamByName('ogun').AsString:='';
+              QYmkEkle.ParamByName('cihaz_ip').AsString:=Qcihaz.FieldByName('IP_ADRES').AsString;
+              QYmkEkle.ParamByName('Kart_no').AsInteger:=cardnumber;
+
+              QYmkEkle.Execute;
+              OraSession1.Commit;
+              qkayit.Close;
+
+   end;
+
+ end else
+ begin
+
+ bilgi_yaz(format('Giriþ Engellendi KartNo.:%d Zaman: %s Personel Bulunamadý!',[cardnumber,DateTimeToStr(now)]));
+
+ {
+ if (cardnumber=9779059) then
+ begin
+    if  (QOGUN.RecordCount>0) then
+    begin
+              czkem1.PlayVoiceByIndex(0);
+              bilgi_yaz(format('Giriþ Yapýldý KartNo. :%d Zaman: %s',[cardnumber,DateTimeToStr(now)]));
+
+              if CZKEM1.ACUnlock(devid,strtoint(Qcihaz.FieldByName('ROLE_TETIK_SURE').AsString))  then
+              begin
+              bilgi_yaz('Kapý Açýldý');
+              end else
+              begin
+                bilgi_yaz('Kapý Açýlamadý hata oluþtu');
+              end;
+                        QYmkEkle.ParamByName('giris_id').AsInteger:=0;
+                        QYmkEkle.ParamByName('tc').AsString:='11111111111';
+                        QYmkEkle.ParamByName('ad_soyad').AsString:='Misafir Kart';
+                        QYmkEkle.ParamByName('tarih').AsDateTime:=now;
+                        QYmkEkle.ParamByName('yedi').AsInteger:=1;
+                        QYmkEkle.ParamByName('ogun').AsString:=QOGUN.FieldByName('SIMGE').AsString ;
+                        QYmkEkle.ParamByName('cihaz_ip').AsString:=Qcihaz.FieldByName('IP_ADRES').AsString;
+                        QYmkEkle.ParamByName('Kart_no').AsInteger:=cardnumber;
+
+                        QYmkEkle.Execute;
+                        OraSession1.Commit;
+                        qkayit.Close;
+    end else
+    begin
+            czkem1.PlayVoiceByIndex(2);
+            bilgi_yaz(format('Giriþ Engellendi KartNo.:%d Zaman: %s',[cardnumber,DateTimeToStr(now)]));
+
+                        QYmkEkle.ParamByName('giris_id').AsInteger:=0;
+                        QYmkEkle.ParamByName('tc').AsString:='11111111111';
+                        QYmkEkle.ParamByName('ad_soyad').AsString:='Misafir Kart';
+                        QYmkEkle.ParamByName('tarih').AsDateTime:=now;
+                        QYmkEkle.ParamByName('yedi').AsInteger:=0;
+                        QYmkEkle.ParamByName('ogun').AsString:=QOGUN.FieldByName('SIMGE').AsString ;
+                        QYmkEkle.ParamByName('cihaz_ip').AsString:=Qcihaz.FieldByName('IP_ADRES').AsString;
+                        QYmkEkle.ParamByName('Kart_no').AsInteger:=cardnumber;
+
+
+                        QYmkEkle.Execute;
+                        OraSession1.Commit;
+                        qkayit.Close;
+    end;
+ end
+ else
+ begin
+             czkem1.PlayVoiceByIndex(2);
+             bilgi_yaz(format('Giriþ Engellendi KartNo.:%d Zaman: %s',[cardnumber,DateTimeToStr(now)]));
+
+                        QYmkEkle.ParamByName('giris_id').AsInteger:=0;
+                        QYmkEkle.ParamByName('tc').AsString:='00000000000';
+                        QYmkEkle.ParamByName('ad_soyad').AsString:='Tanýmsýz Kart';
+                        QYmkEkle.ParamByName('tarih').AsDateTime:=now;
+                        QYmkEkle.ParamByName('yedi').AsInteger:=0;
+                        QYmkEkle.ParamByName('ogun').AsString:=QOGUN.FieldByName('SIMGE').AsString ;
+                        QYmkEkle.ParamByName('cihaz_ip').AsString:=Qcihaz.FieldByName('IP_ADRES').AsString;
+                        QYmkEkle.ParamByName('Kart_no').AsInteger:=cardnumber;
+
+                        QYmkEkle.Execute;
+                        OraSession1.Commit;
+                        qkayit.Close;
+ end;      }
+
+
+ end;
+
+
+
+
+
+end;
+
+procedure TForm1.FormActivate(Sender: TObject);
+begin
+ btnBaglan.Click;
+end;
+
+procedure TForm1.QcihazAfterOpen(DataSet: TDataSet);
+begin
+edtNetAddress.Text:=Qcihaz.FieldByName('IP_ADRES').AsString;
+edtNetPort.Text:=Qcihaz.FieldByName('PORT_NO').AsString;
+edtCihazAdi.Text:=Qcihaz.FieldByName('CIHAZ_ADI').AsString;
+edtCihazTuru.Text:=Qcihaz.FieldByName('CIHAZ_TUR').AsString;
+edtCihazTetSure.Text:=Qcihaz.FieldByName('ROLE_TETIK_SURE').AsString;
+end;
+
+end.
